@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+gunicorn
+python-dotenv
+requests
+google-genai
+googletrans
+chromadb>=0.4.24
+numpy
+scikit-learn
+playwright
+beautifulsoup4
