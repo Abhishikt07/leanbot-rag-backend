@@ -1,23 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# --- 1. Database Initialization (Ephemeral Logs/Leads/Cache) ---
-# NOTE: Data in these DBs is LOST on container restart/redeploy.
-echo "Initializing ephemeral SQLite logs/leads/cache DBs..."
-python3 -c "from Day_19_E import init_cache_db, init_analytics_db, init_leads_db; init_cache_db(); init_analytics_db(); init_leads_db()"
+# --- Configuration ---
+# This path MUST match the directory where ChromaDB saves its files (CHROMA_DB_PATH from Day_19_A.py)
+DB_PATH="chroma_db_leanext" 
 
-# --- 2. RAG Knowledge Base Check/Build (Uses Persistent Disk) ---
-# KB_PATH MUST match the CHROMA_DB_PATH constant in Day_19_A.py
-KB_PATH="chroma_db_leanext" 
-
-# Check if the RAG KB folder exists on the mounted Render Persistent Disk
-if [ ! -d "$KB_PATH" ]; then
-    echo "⚠️ RAG Knowledge Base NOT found. Starting full build (SLOW!)."
-    # Build ChromaDB and FAQ index (builds to the mounted disk path)
-    python3 -c "from Day_19_B import build_and_index_knowledge_base, build_and_index_faq_suggestions; build_and_index_knowledge_base(max_depth=3, render_js_flag=False, sitemap_only=False); build_and_index_faq_suggestions()"
+# --- 1. Persistence Check and Build ---
+echo "Checking for existing RAG vector database at $DB_PATH..."
+if [ ! -d "$DB_PATH" ] || [ ! -f "$DB_PATH/chroma.sqlite3" ]
+then
+    echo "Vector database NOT FOUND or incomplete. Initiating slow build process..."
+    # The Day_19_B.py main_cli with --build flag saves data to DB_PATH
+    python3 Day_19_B.py --build
+    
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Vector build failed. Exiting deployment."
+        exit 1
+    fi
+    echo "Vector database build complete and saved to Persistent Disk."
 else
-    echo "✅ RAG Knowledge Base found on persistent disk. Skipping build."
+    echo "Vector database found on Persistent Disk. Skipping rebuild."
 fi
 
-# --- 3. Run FastAPI with Gunicorn/Uvicorn ---
-# Runs the main FastAPI application (FastAPI_Analytics:app)
+# --- 2. Start the FastAPI Analytics Service ---
+# The service will run Day_19_D.py for the Chatbot and FastAPI_Analytics.py for the API
+# We start the Analytics API here, assuming your main RAG API is in Day_19_D (or the main chatbot UI).
+echo "Starting FastAPI Analytics application..."
+# Run the API using Gunicorn. The -w 4 sets 4 worker processes.
 gunicorn -w 4 -k uvicorn.workers.UvicornWorker FastAPI_Analytics:app --bind 0.0.0.0:$PORT
