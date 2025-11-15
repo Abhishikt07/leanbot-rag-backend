@@ -10,7 +10,7 @@ numpy
 scikit-learn
 playwright
 beautifulsoup4
-google-api-python-client
-oogle-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
+google-api-python-client
+pydantic
