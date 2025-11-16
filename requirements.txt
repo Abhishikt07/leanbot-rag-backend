@@ -1,16 +1,25 @@
-fastapi
-uvicorn
-gunicorn
-python-dotenv
-requests
-google-genai
-googletrans
-chromadb>=0.4.24
-numpy
-scikit-learn
-playwright
-beautifulsoup4
-google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-pydantic
+# --- Core Application and UI ---
+streamlit                     # Used for the main conversational AI UI (Day_19_D.py)
+fastapi                       # Used for the secure Analytics API (FastAPI_Analytics.py)
+uvicorn[standard]             # ASGI server to run FastAPI (used in start.sh and FastAPI_Analytics.py)
+gunicorn                      # Production WSGI server, used with uvicorn workers (start.sh)
+pydantic                      # Used for data validation in FastAPI (QueryLog, AnalyticsResponse, Lead models)
+python-dotenv                 # To load configuration variables from the .env file
+numpy==1.26.4
+# --- RAG and Data Storage ---
+chromadb                      # Vector database for RAG context and FAQ suggestions (Day_19_B.py, Day_19_C.py)
+sentence-transformers         # Used by ChromaDB for embedding documents (EMBEDDING_MODEL_NAME is 'all-MiniLM-L6-v2')
+# --- LLM and Translation ---
+requests                      # To make HTTP calls to the Gemini API and external websites (Day_19_C.py, Day_19_B.py)
+googletrans==4.0.0-rc1        # Used for multilingual detection and translation (language_middleware.py)
+# --- Web Scraping ---
+bs4                           # BeautifulSoup for parsing HTML and sitemaps (Day_19_B.py)
+lxml                          # Fast parser used by BeautifulSoup
+playwright                    # Used for dynamic content scraping (RENDER_JS = True) (Day_19_B.py)
+# Note: After installing 'playwright', you must run 'playwright install' to download browser binaries.
+# --- Demo Scheduling ---
+google-api-python-client      # Google API client for Calendar/Meet event creation (demo_scheduler.py)
+google-auth-oauthlib          # For handling OAuth flow (though service_account is used)
+google-auth-httplib2          # Dependency for Google Auth
+google-auth                   # General Google authentication library
+# Note: The code uses google.oauth2.service_account for credentials.
