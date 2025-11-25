@@ -15,3 +15,15 @@ playwright/.cache/
 # __pycache__
 __pycache__/
 *.pyc
+
+# Database files
+chroma_db_leanext/*
+!chroma_db_leanext/index
+!chroma_db_leanext/*.json
+!chroma_db_leanext/*.pickle
+!chroma_db_leanext/*.pt
+
+crawler_cache/
+
+**/onnxruntime/
+**/torch/

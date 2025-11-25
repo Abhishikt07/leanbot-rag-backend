@@ -382,39 +382,43 @@ def build_and_index_faq_suggestions():
         return None
 
 
-@st.cache_resource
 def load_or_build_knowledge_base():
-    """Controls the flow for Streamlit: Load DB if it exists, otherwise build it with defaults."""
-    
-    # CRITICAL FIX: Initialize both databases here
-    init_cache_db() 
-    init_analytics_db() 
+    """
+    Production-safe loader:
+    - Always loads existing ChromaDB
+    - Never rebuilds the index on server (Render)
+    - Removes Streamlit UI logic (not allowed in FastAPI)
+    """
+    # Initialize local SQLite DBs (safe)
+    init_cache_db()
+    init_analytics_db()
     init_leads_db()
 
-    # We are no longer logging system events from Day_19_B, only from Day_19_D
-    # log_chatbot_interaction("INIT", "INIT", "System", "System", "en") # Old logging logic removed
-    
-    status_container = st.empty()
-    progress_bar = status_container.progress(0, text="Initializing Knowledge Base...")
-    
     try:
         client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        collection_names = [c.name for c in client.list_collections()]
-        
-        if COLLECTION_NAME in collection_names:
-            collection = client.get_collection(name=COLLECTION_NAME, embedding_function=_EMBEDDING_FUNCTION)
-            if collection.count() > 0:
-                progress_bar.empty()
-                status_container.info(f"💾 Knowledge Base Loaded: {collection.count()} indexed chunks.", icon="⚡")
-                return collection
+
+        # Try loading existing main collection
+        collection = client.get_collection(
+            name=COLLECTION_NAME,
+            embedding_function=_EMBEDDING_FUNCTION
+        )
+
+        # If the collection has documents → return it
+        if collection.count() > 0:
+            logging.info(f"[LOAD] Knowledge Base Loaded: {collection.count()} chunks.")
+            return collection
+
+        else:
+            logging.error("[ERROR] Collection found but empty. "
+                          "You must build the DB locally and commit it.")
+            raise ValueError("Empty ChromaDB collection.")
+
     except Exception as e:
-        logging.warning(f"ChromaDB Load Failed: {e}. Attempting rebuild.")
-        pass 
-    
-    status_container.warning("🛑 Database not found or empty. Building and indexing knowledge base now...")
-    return build_and_index_knowledge_base(
-        max_depth=SCRAPE_MAX_DEPTH, render_js_flag=RENDER_JS, sitemap_only=False, progress_bar=progress_bar
-    )
+        logging.error(f"[FATAL] Could not load ChromaDB: {e}")
+        logging.error("Render cannot build the DB at runtime. "
+                      "Run Day_19_B.py --build locally and commit chroma folder.")
+        raise
+
 
 def main_cli():
     """CLI entry point for building and updating the knowledge base."""
