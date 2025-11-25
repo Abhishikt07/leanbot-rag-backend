@@ -1,0 +1,351 @@
+/* widget.css
+   Basic styling for Leanext chat widget
+   You can tune colors/fonts to match your brand.
+*/
+
+:root {
+    --leanext-brand-color: #0f6ad8;
+    --leanext-accent-color: #ff9800;
+    --leanext-bg: #ffffff;
+    --leanext-border-radius: 16px;
+    --leanext-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+    --leanext-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.leanext-chat-root {
+    font-family: var(--leanext-font);
+}
+
+/* Floating bubble button */
+.leanext-chat-bubble {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--leanext-brand-color);
+    color: #fff;
+    border: none;
+    box-shadow: var(--leanext-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999999;
+}
+
+.leanext-chat-bubble-icon {
+    font-size: 24px;
+}
+
+/* Chat dialog */
+.leanext-chat-dialog {
+    position: fixed;
+    right: 24px;
+    bottom: 96px;
+    width: 380px;
+    max-height: 80vh;
+    background: var(--leanext-bg);
+    border-radius: 20px;
+    box-shadow: var(--leanext-shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 999999;
+}
+
+@media (max-width: 600px) {
+    .leanext-chat-dialog {
+        right: 8px;
+        left: 8px;
+        bottom: 80px;
+        width: auto;
+        max-height: 80vh;
+    }
+}
+
+/* Header */
+.leanext-chat-header {
+    padding: 12px 14px;
+    background: linear-gradient(135deg,
+            var(--leanext-brand-color),
+            #173f97);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.leanext-chat-header-main {
+    display: flex;
+    flex-direction: column;
+}
+
+.leanext-chat-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.leanext-chat-subtitle {
+    font-size: 11px;
+    opacity: 0.9;
+}
+
+.leanext-chat-header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.leanext-chat-header-btn {
+    background: transparent;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+/* Messages area */
+.leanext-chat-messages {
+    padding: 8px 10px;
+    flex: 1;
+    overflow-y: auto;
+    background: #f7f7fb;
+}
+
+.leanext-chat-message-row {
+    margin-bottom: 10px;
+    display: flex;
+}
+
+.leanext-chat-message-row.user {
+    justify-content: flex-end;
+}
+
+.leanext-chat-message-row.assistant {
+    justify-content: flex-start;
+}
+
+.leanext-chat-message {
+    max-width: 80%;
+    border-radius: 14px;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    position: relative;
+}
+
+.leanext-chat-message.user .leanext-chat-message {
+    background: var(--leanext-brand-color);
+    color: #fff;
+    border-bottom-right-radius: 2px;
+}
+
+.leanext-chat-message.assistant .leanext-chat-message {
+    background: #ffffff;
+    color: #222;
+    border-bottom-left-radius: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.leanext-chat-message-meta {
+    font-size: 10px;
+    color: #777;
+    margin-top: 3px;
+}
+
+/* Feedback buttons */
+.leanext-feedback-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.leanext-feedback-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.leanext-feedback-btn.active {
+    opacity: 1;
+}
+
+/* Composer */
+.leanext-chat-composer {
+    border-top: 1px solid #e5e5f0;
+    padding: 6px 8px;
+    background: #fcfcff;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.leanext-chat-input-row {
+    display: flex;
+    gap: 6px;
+}
+
+.leanext-chat-input-row textarea {
+    flex: 1;
+    resize: none;
+    border-radius: 12px;
+    border: 1px solid #d0d0e0;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-family: var(--leanext-font);
+}
+
+.leanext-chat-send-btn {
+    background: var(--leanext-brand-color);
+    border: none;
+    color: #fff;
+    border-radius: 999px;
+    padding: 0 14px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* FAQs */
+.leanext-faq-section {
+    margin-top: 4px;
+}
+
+.leanext-faq-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+.leanext-faq-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.leanext-faq-btn {
+    flex: 1 1 30%;
+    border-radius: 999px;
+    border: 1px solid #d0d0e0;
+    background: #ffffff;
+    font-size: 11px;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+.leanext-faq-more {
+    margin-top: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--leanext-brand-color);
+}
+
+/* Lead form modal */
+.leanext-lead-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.leanext-lead-modal {
+    width: 100%;
+    max-width: 360px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: var(--leanext-shadow);
+}
+
+.leanext-lead-modal h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+
+.leanext-lead-modal p {
+    margin: 0 0 10px;
+    font-size: 11px;
+}
+
+.leanext-lead-field {
+    margin-bottom: 6px;
+}
+
+.leanext-lead-field label {
+    display: block;
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+
+.leanext-lead-field input,
+.leanext-lead-field select {
+    width: 100%;
+    font-size: 12px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    border: 1px solid #d0d0e0;
+}
+
+.leanext-lead-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.leanext-btn-primary,
+.leanext-btn-secondary {
+    flex: 1;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+}
+
+.leanext-btn-primary {
+    background: var(--leanext-brand-color);
+    color: #fff;
+}
+
+.leanext-btn-secondary {
+    background: #f1f1f7;
+    color: #333;
+}
+
+/* Toast */
+.leanext-toast {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 20px;
+    background: #333;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease-in-out;
+    z-index: 999999;
+}
+
+.leanext-toast.show {
+    opacity: 1;
+}
+
+/* Debug panel */
+.leanext-debug-panel {
+    font-size: 10px;
+    padding: 4px 6px;
+    border-top: 1px dashed #ccc;
+    max-height: 120px;
+    overflow: auto;
+    background: #fafafa;
+}

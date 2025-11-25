@@ -1,42 +1,34 @@
-# ---------------------------------------------
-# 1. Virtual Environment & Dependencies
-# ---------------------------------------------
-# Ignore the Python virtual environment folder
-.venv/
-venv/
-# Ignore packages installed via pip, like the ones that caused the size error
-pip-wheel-cache/
-htmlcov/
-.coverage
-
-# ---------------------------------------------
-# 2. Sensitive Files (The one that caused the secret error)
-# ---------------------------------------------
-# EXCLUDE THIS FILE! It contains your Google Cloud Service Account Credentials.
-credentials.json
-*.env  # Generic for environment files
-.env.local
-
-# ---------------------------------------------
-# 3. Project-Specific Large & Cache Files
-# ---------------------------------------------
-# Based on your file explorer (RAG/Database caches)
-chroma_db_leanext/
-crawler_cache/
-chat_cache_db-shm
-chat_cache_db-wal
-chatbot_logs.db
-chatbot_logs.db-shm
-chatbot_logs.db-wal
-leads.db
-*.log
-data/
-
-# ---------------------------------------------
-# 4. Standard Python / OS Files
-# ---------------------------------------------
+# Python caches
 __pycache__/
 *.pyc
-.DS_Store # macOS system file
-*.bak
-*.swp
+
+# Virtual environments
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Databases & caches (DO NOT upload)
+*.db
+*.sqlite3
+*.sqlite
+chat_cache.db
+crawler_cache/
+chroma_db_leanext/
+
+# Playwright browser binaries (huge!)
+playwright/.cache/
+
+# VS Code & editor configs
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
