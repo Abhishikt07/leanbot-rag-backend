@@ -1,34 +1,17 @@
-# Python caches
-__pycache__/
-*.pyc
-
 # Virtual environments
+.venv/
 venv/
-env/
 
-# Environment variables
-.env
-.env.*
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Databases & caches (DO NOT upload)
-*.db
-*.sqlite3
-*.sqlite
-chat_cache.db
-crawler_cache/
-chroma_db_leanext/
-
-# Playwright browser binaries (huge!)
+# Playwright large binaries
+**/playwright/
 playwright/.cache/
 
-# VS Code & editor configs
-.vscode/
-.idea/
+# Torch / ONNX heavy libs
+*.onnx
+*.dylib
+*.so
+*.bin
 
-# Logs
-*.log
-logs/
+# __pycache__
+__pycache__/
+*.pyc
