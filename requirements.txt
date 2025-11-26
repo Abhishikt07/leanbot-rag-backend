@@ -1,46 +1,10 @@
-# ===============================
-# Core Frameworks & Servers
-# ===============================
 fastapi
-uvicorn[standard]
-gunicorn
-pydantic
-python-dotenv
-requests
+uvicorn
+chromadb==0.4.24
+sentence-transformers==2.2.2
 numpy==1.26.4
-dotenv 
-
-# ===============================
-# RAG + Embeddings + Vector Store
-# ===============================
-chromadb
-sentence-transformers
-
-# ===============================
-# Web Scraping & HTML Parsing
-# ===============================
+scikit-learn==1.5.0
+requests
 beautifulsoup4
 lxml
-
-# ===============================
-# UI (Streamlit App — optional)
-# ===============================
-streamlit
-
-# ===============================
-# Multilingual Middleware
-# ===============================
-googletrans==4.0.0-rc1
-
-# ===============================
-# Google API (Calendar, Meet, OAuth)
-# ===============================
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-
-# ===============================
-# Optional (if your code uses them)
-# ===============================
-python-multipart        # if you accept file uploads in FastAPI
+python-dotenv

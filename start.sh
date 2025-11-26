@@ -1,10 +1,15 @@
 #!/bin/bash
+echo "Starting Leanext RAG FastAPI Backend..."
 
-echo "Starting Leanext RAG Chatbot Backend..."
+# Ensure Python uses correct PATH
+export PYTHONUNBUFFERED=1
 
-# Render always provides $PORT - we MUST bind to it
-exec uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port $PORT \
-    --workers 1 \
-    --timeout-keep-alive 75
+# Render exposes your assigned port in $PORT
+if [ -z "$PORT" ]; then
+  export PORT=8000
+fi
+
+echo "➡ Listening on PORT: $PORT"
+
+# Start FastAPI app
+uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
