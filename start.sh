@@ -1,15 +1,14 @@
 #!/bin/bash
+
 echo "Starting Leanext RAG FastAPI Backend..."
 
-# Ensure Python uses correct PATH
-export PYTHONUNBUFFERED=1
-
-# Render exposes your assigned port in $PORT
-if [ -z "$PORT" ]; then
-  export PORT=8000
-fi
+# Render sets PORT automatically
+export PORT=${PORT:-8000}
 
 echo "➡ Listening on PORT: $PORT"
 
-# Start FastAPI app
-uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+# Run the FastAPI app inside app/main.py
+gunicorn app.main:app \
+  --workers 1 \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:$PORT
