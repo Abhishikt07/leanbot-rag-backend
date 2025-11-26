@@ -1,5 +1,8 @@
 fastapi
 uvicorn
+uvicorn[standard]
+gunicorn
+
 chromadb==0.4.24
 sentence-transformers==2.2.2
 numpy==1.26.4
@@ -8,6 +11,3 @@ requests
 beautifulsoup4
 lxml
 python-dotenv
-gunicorn
-uvicorn
-uvicorn[standard]
