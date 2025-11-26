@@ -21,7 +21,6 @@ sentence-transformers
 # ===============================
 beautifulsoup4
 lxml
-playwright   # Requires: playwright install --with-deps
 
 # ===============================
 # UI (Streamlit App — optional)

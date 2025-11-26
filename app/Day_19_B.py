@@ -14,7 +14,6 @@ from urllib.robotparser import RobotFileParser
 import hashlib
 import json
 import argparse
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # Imports from configuration
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -98,29 +97,10 @@ def fetch_page(url, render_js=False):
     except Exception:
          pass 
     
-    # 2. Dynamic Fetch (Playwright) if requested or static failed/content short
-    if render_js or ('response' not in locals() or text_len < RENDER_JS_THRESHOLD_WORDS):
-        logging.info(f"Trying JS render for {url}...")
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page(user_agent=CRAWLER_USER_AGENT)
-                page.set_default_timeout(20000)
-                page.goto(url, wait_until="networkidle")
-                html_content = page.content()
-                final_url = _normalize_url(page.url)
-                browser.close()
-                logging.info("JS render successful.")
-                return html_content, final_url
-        except PlaywrightTimeoutError:
-             logging.error(f"Playwright timed out for {url}.")
-             return None, _normalize_url(url)
-        except Exception as e:
-             logging.error(f"Playwright failed for {url}: {e}")
-             return None, _normalize_url(url)
-             
-    # Fallback return after all attempts
-    return response.text if 'response' in locals() else None, final_url if 'final_url' in locals() else _normalize_url(url)
+         # JS rendering disabled for Render Free Tier (no Playwright).
+    logging.info("JS rendering skipped (Playwright removed).")
+    return response.text if 'response' in locals() else None, final_url
+
 
 def _save_raw_html(url, html):
     """Saves raw HTML content to the cache directory."""
