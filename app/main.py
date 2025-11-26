@@ -32,15 +32,21 @@ app.add_middleware(
 
 translator = LanguageTranslator()
 
-# --------------------------
-# Load Knowledge Base on Startup
-# --------------------------
-print("🔄 Loading Knowledge Base...")
-chroma_collection = load_or_build_knowledge_base()
+chroma_collection = None
+faq_suggestions_collection = None
 
-print("🔄 Loading FAQ Suggestions Collection...")
-client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-faq_suggestions_collection = client.get_collection(name=FAQ_COLLECTION_NAME)
+@app.on_event("startup")
+async def startup_event():
+    global chroma_collection, faq_suggestions_collection
+    
+    print("🔄 Startup: Loading Knowledge Base...")
+    chroma_collection = load_or_build_knowledge_base()
+
+    print("🔄 Startup: Loading FAQ Collection...")
+    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    faq_suggestions_collection = client.get_collection(name=FAQ_COLLECTION_NAME)
+
+    print("✅ Backend Ready. All systems loaded.")
 
 
 # --------------------------
