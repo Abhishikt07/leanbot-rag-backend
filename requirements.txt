@@ -3,14 +3,11 @@ uvicorn
 uvicorn[standard]
 gunicorn
 
-# ChromaDB + embedding ecosystem
 chromadb==0.4.24
 sentence-transformers==2.2.2
+huggingface_hub==0.16.4
 transformers==4.30.2
-torch==2.1.0
-huggingface_hub==0.16.4   # <<< critical version pin
 
-# Utils
 numpy==1.26.4
 scikit-learn==1.5.0
 requests
