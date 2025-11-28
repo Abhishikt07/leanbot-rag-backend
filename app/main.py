@@ -25,6 +25,10 @@ from .Day_19_A import (
 ###############################################################
 
 app = FastAPI()
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Leanext RAG backend is running"}
+
 
 # CORS for widget frontend
 app.add_middleware(
