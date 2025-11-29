@@ -1,97 +1,166 @@
+# app/Day_19_B.py
 """
-Day_19_B — Backend-Optimized ChromaDB Loader (Render-Safe)
-NO Streamlit, NO Playwright, NO heavy runtime indexing.
+Core utilities for talking to the *existing* ChromaDB index.
+
+Key ideas:
+- Never rebuild embeddings here.
+- Always reuse the persisted DB at app/chroma_db_leanext.
+- Provide a simple search_leanext_kb(query, n_results=5) helper
+  that other modules (Day_19_D, FastAPI, etc.) can call.
 """
 
 import os
-import json
-import time
-import logging
-import chromadb
-from bs4 import BeautifulSoup
-import urllib.parse
-import requests
-import hashlib
+from typing import Any, Dict, List, Optional
 
-# Basic config imports (safe)
-from .Day_19_A import (
-    BASE_URL,
-    CHROMA_DB_PATH,
-    COLLECTION_NAME,
-    FAQ_COLLECTION_NAME,
-    EMBEDDING_MODEL_NAME,
+from chromadb import PersistentClient
+from chromadb.api.models.Collection import Collection
+
+
+# -------------------------------------------------------------------
+# 1. Resolve the *persisted* Chroma path inside the app package
+# -------------------------------------------------------------------
+
+# /opt/render/project/src/app/Day_19_B.py -> /opt/render/project/src/app/chroma_db_leanext
+CHROMA_PERSIST_DIRECTORY = os.path.join(
+    os.path.dirname(__file__),  # app/
+    "chroma_db_leanext"
 )
 
-# Embedding function (light)
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-EMBED_FN = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
+_client: Optional[PersistentClient] = None
+_kb_collection: Optional[Collection] = None
 
 
-#################################################################
-# HELPERS — kept for compatibility but NOT used at startup
-#################################################################
+# -------------------------------------------------------------------
+# 2. Client + Collection helpers
+# -------------------------------------------------------------------
 
-def normalize_url(url):
-    """Basic URL cleanup."""
-    url = urllib.parse.urldefrag(url)[0]
-    parsed = urllib.parse.urlparse(url)
-    return urllib.parse.urlunparse(parsed).rstrip("/")
+def get_chroma_client() -> PersistentClient:
+    """Return a singleton PersistentClient pointing to app/chroma_db_leanext."""
+    global _client
 
-
-#################################################################
-# MAIN: Load Existing ChromaDB (NO indexing)
-#################################################################
-
-def load_or_build_knowledge_base():
-    """
-    Render-safe version.
-    Loads an existing ChromaDB index.
-    Does NOT rebuild or crawl the site.
-    """
-
-    logging.info("Attempting to load existing ChromaDB index...")
-
-    try:
-        client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-
-        collection_names = [c.name for c in client.list_collections()]
-
-        if COLLECTION_NAME not in collection_names:
-            logging.error(
-                f"❌ Collection '{COLLECTION_NAME}' not found. "
-                f"You must run local indexing before deploying."
+    if _client is None:
+        if not os.path.isdir(CHROMA_PERSIST_DIRECTORY):
+            raise RuntimeError(
+                f"Chroma directory not found at {CHROMA_PERSIST_DIRECTORY}. "
+                "Make sure you committed app/chroma_db_leanext to Git."
             )
-            return None
 
-        collection = client.get_collection(
-            name=COLLECTION_NAME,
-            embedding_function=EMBED_FN
+        _client = PersistentClient(path=CHROMA_PERSIST_DIRECTORY)
+        print(f"[Day_19_B] Connected to Chroma at: {CHROMA_PERSIST_DIRECTORY}")
+
+    return _client
+
+
+def _pick_kb_collection(client: PersistentClient) -> Collection:
+    """
+    Heuristic: pick a 'main KB' collection from whatever exists in Chroma.
+    Preference order:
+      - Name exactly: leanext_kb / leanext_main / leanext_docs
+      - Otherwise: first collection in the list.
+    """
+    collections = client.list_collections()
+    if not collections:
+        raise RuntimeError(
+            "No Chroma collections found in the persisted DB. "
+            "Did you run the crawler / indexer locally and commit the DB?"
         )
 
-        logging.info(f"✅ Loaded ChromaDB collection with {collection.count()} chunks.")
-        return collection
+    preferred_names = ["leanext_kb", "leanext_main", "leanext_docs"]
 
-    except Exception as e:
-        logging.error(f"❌ Failed to load ChromaDB: {e}")
-        return None
+    # Exact name match if possible
+    for name in preferred_names:
+        for col in collections:
+            if col.name == name:
+                print(f"[Day_19_B] Using preferred KB collection: {col.name}")
+                return col
+
+    # Fallback: first collection
+    col = collections[0]
+    print(f"[Day_19_B] Using fallback KB collection: {col.name}")
+    return col
 
 
-#################################################################
-# Load FAQ collection (also required for Startup)
-#################################################################
+def get_kb_collection() -> Collection:
+    """Return a singleton handle to the 'main' KB collection."""
+    global _kb_collection
 
-def load_faq_collection():
-    try:
-        client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        collection = client.get_collection(
-            name=FAQ_COLLECTION_NAME,
-            embedding_function=EMBED_FN
+    if _kb_collection is None:
+        client = get_chroma_client()
+        _kb_collection = _pick_kb_collection(client)
+
+    return _kb_collection
+
+
+# -------------------------------------------------------------------
+# 3. Public search helpers
+# -------------------------------------------------------------------
+
+def search_leanext_kb(
+    query: str,
+    n_results: int = 5,
+    where: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Low-level wrapper around Chroma's .query().
+
+    Returns the *raw* Chroma response:
+      {
+        "ids": [[...]],
+        "distances": [[...]] or "embeddings": [...],
+        "documents": [[...]],
+        "metadatas": [[...]],
+      }
+    """
+    if not query or not query.strip():
+        return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+    collection = get_kb_collection()
+
+    result = collection.query(
+        query_texts=[query],
+        n_results=n_results,
+        where=where or {},
+        include=["documents", "metadatas", "distances"],
+    )
+
+    return result
+
+
+def search_leanext_kb_formatted(
+    query: str,
+    n_results: int = 5,
+    where: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Convenience wrapper that returns a cleaner list of dicts:
+
+    [
+      {
+        "id": "...",
+        "score": <float>,
+        "document": "...",
+        "metadata": {...},
+      },
+      ...
+    ]
+    """
+    raw = search_leanext_kb(query=query, n_results=n_results, where=where)
+
+    ids = raw.get("ids", [[]])[0] or []
+    docs = raw.get("documents", [[]])[0] or []
+    metas = raw.get("metadatas", [[]])[0] or []
+    dists = raw.get("distances", [[]])[0] or []
+
+    formatted = []
+    for _id, doc, meta, dist in zip(ids, docs, metas, dists):
+        formatted.append(
+            {
+                "id": _id,
+                "score": float(dist) if dist is not None else None,
+                "document": doc,
+                "metadata": meta or {},
+            }
         )
-        logging.info(f"✅ FAQ collection loaded ({collection.count()} FAQs)")
-        return collection
-    except Exception as e:
-        logging.error(f"❌ Failed loading FAQ collection: {e}")
-        return None
+
+    return formatted

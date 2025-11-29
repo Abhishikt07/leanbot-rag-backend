@@ -1,208 +1,159 @@
+# app/Day_19_C.py
 """
-Day_19_C — Render-Safe RAG Engine
-No Streamlit. No UI. Only backend logic.
+FAQ suggestion helpers.
+
+We *only* read from the existing Chroma DB at app/chroma_db_leanext.
+We do NOT rebuild or re-embed anything here.
+
+Two main entry points:
+- load_faq_suggestions()          -> prewarm + cache
+- get_similar_faqs(query, top_k)  -> return suggested FAQ questions
 """
 
-import json
-import time
-import logging
-import requests
+from typing import Any, Dict, List, Optional
 
-from .Day_19_A import (
-    GEMINI_API_KEY,
-    API_URL,
-    TOP_K_CHUNKS,
-    AUTOCOMPLETE_K,
-    QUERY_PREDICTION_THRESHOLD,
-    CLEANING_SYSTEM_PROMPT,
-    FINAL_FALLBACK_MESSAGE,
-    GEMINI_RAG_SYSTEM_PROMPT,
-    SMALL_TALK_TRIGGERS,
-    UNCLEAR_QUERY_THRESHOLD,
-    RELATED_QS_LIMIT,
-    BASE_URL,
-    FAQ_COLLECTION_NAME,
-    LANGUAGE_FAIL_MESSAGE,
-    DEFAULT_LANGUAGE,
-    UNCLEAR_QUERY_RESPONSE,
-    LEAD_SCORE_WEIGHTS,
-    LEAD_TRIGGER_KEYWORDS,
-)
+from chromadb.api.models.Collection import Collection
 
-from .Day_19_E import get_cached_answer, save_answer_to_cache
-from .language_middleware import LanguageTranslator
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-translator = LanguageTranslator()
+from app.Day_19_B import get_chroma_client
 
 
-#################################################################
-# Small Talk
-#################################################################
+_faq_collection: Optional[Collection] = None
+_cached_faq_docs: Optional[List[Dict[str, Any]]] = None
 
-def check_small_talk(query):
-    query_l = query.lower()
-    for trigger, reply in SMALL_TALK_TRIGGERS.items():
-        if trigger in query_l:
-            return reply
+
+# -------------------------------------------------------------------
+# 1. Collection selection
+# -------------------------------------------------------------------
+
+def _pick_faq_collection() -> Optional[Collection]:
+    """
+    Try to find a dedicated FAQ collection.
+
+    Heuristic:
+      - Prefer collection with 'faq' in the name (case-insensitive).
+      - Otherwise: return None (no FAQ collection).
+    """
+    client = get_chroma_client()
+    collections = client.list_collections()
+
+    for col in collections:
+        if "faq" in col.name.lower():
+            print(f"[Day_19_C] Using FAQ collection: {col.name}")
+            return col
+
+    print("[Day_19_C] No FAQ collection found (name containing 'faq').")
     return None
 
 
-#################################################################
-# Query Cleaning
-#################################################################
+def get_faq_collection() -> Optional[Collection]:
+    global _faq_collection
+    if _faq_collection is None:
+        _faq_collection = _pick_faq_collection()
+    return _faq_collection
 
-def clean_query_with_gemini(raw_query):
-    if not GEMINI_API_KEY:
-        return raw_query, None
 
-    payload = {
-        "contents": [{"parts": [{"text": raw_query}]}],
-        "systemInstruction": {"parts": [{"text": CLEANING_SYSTEM_PROMPT}]}
-    }
+# -------------------------------------------------------------------
+# 2. Prewarm / load
+# -------------------------------------------------------------------
 
-    try:
-        res = requests.post(API_URL, json=payload)
-        res.raise_for_status()
-        data = res.json()
+def load_faq_suggestions(max_items: int = 100) -> List[Dict[str, Any]]:
+    """
+    Load FAQ entries from the FAQ collection (if exists) and cache them.
 
-        cleaned = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", raw_query)
+    Returns a list like:
+      [
+        {
+          "id": "...",
+          "question": "...",
+          "metadata": {...}
+        },
+        ...
+      ]
+    """
+    global _cached_faq_docs
+
+    faq_col = get_faq_collection()
+    if faq_col is None:
+        _cached_faq_docs = []
+        print("[Day_19_C] FAQ suggestions disabled (no FAQ collection).")
+        return _cached_faq_docs
+
+    # Fetch all docs (or the first max_items) – safe since it's only called once at startup.
+    all_data = faq_col.get(
+        include=["documents", "metadatas"]
+    )
+
+    ids = all_data.get("ids", []) or []
+    docs = all_data.get("documents", []) or []
+    metas = all_data.get("metadatas", []) or []
+
+    faq_items: List[Dict[str, Any]] = []
+    for _id, doc, meta in zip(ids, docs, metas):
+        faq_items.append(
+            {
+                "id": _id,
+                "question": doc,
+                "metadata": meta or {},
+            }
         )
-        return cleaned.strip(), None
 
-    except Exception as e:
-        logging.error(f"Cleaning failed: {e}")
-        return raw_query, str(e)
+    # Truncate to max_items for safety
+    _cached_faq_docs = faq_items[:max_items]
+
+    print(f"[Day_19_C] Cached {len(_cached_faq_docs)} FAQ items.")
+    return _cached_faq_docs
 
 
-#################################################################
-# Retrieval
-#################################################################
+# -------------------------------------------------------------------
+# 3. Similar FAQ suggestions for a user query
+# -------------------------------------------------------------------
 
-def retrieve_context(query, collection, history_queries=""):
-    try:
-        effective = f"{query} | {history_queries}" if history_queries else query
+def get_similar_faqs(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    """
+    Given a user query, return the top-K similar FAQ entries (if FAQ collection exists).
 
-        res = collection.query(
-            query_texts=[effective],
-            n_results=TOP_K_CHUNKS,
-            include=["documents", "metadatas", "distances"]
+    Shape:
+      [
+        {
+          "id": "...",
+          "question": "...",
+          "score": <float>,
+          "metadata": {...},
+        },
+        ...
+      ]
+    """
+    faq_col = get_faq_collection()
+    if faq_col is None:
+        return []
+
+    if not query or not query.strip():
+        # Fallback: just return the top cached ones (if any)
+        global _cached_faq_docs
+        if _cached_faq_docs is None:
+            load_faq_suggestions()
+        return (_cached_faq_docs or [])[:top_k]
+
+    res = faq_col.query(
+        query_texts=[query],
+        n_results=top_k,
+        include=["documents", "metadatas", "distances"],
+    )
+
+    ids = res.get("ids", [[]])[0] or []
+    docs = res.get("documents", [[]])[0] or []
+    metas = res.get("metadatas", [[]])[0] or []
+    dists = res.get("distances", [[]])[0] or []
+
+    out: List[Dict[str, Any]] = []
+    for _id, doc, meta, dist in zip(ids, docs, metas, dists):
+        out.append(
+            {
+                "id": _id,
+                "question": doc,
+                "score": float(dist) if dist is not None else None,
+                "metadata": meta or {},
+            }
         )
-    except Exception as e:
-        logging.error(f"RAG Retrieval failed: {e}")
-        return None, 1.0, []
 
-    if not res or not res["documents"] or not res["documents"][0]:
-        return None, 1.0, []
-
-    docs = res["documents"][0]
-    metas = res["metadatas"][0]
-    dists = res["distances"][0]
-
-    context_blocks = []
-    top_meta = []
-
-    for doc, meta, dist in zip(docs, metas, dists):
-        try:
-            meta["headings"] = json.loads(meta.get("headings", "[]"))
-        except:
-            meta["headings"] = []
-
-        context_blocks.append(f"Source ({meta.get('path','unknown')}): {doc}")
-        top_meta.append(meta)
-
-    combined = "\n\n---\n\n".join(context_blocks)
-    return combined, dists[0], top_meta
-
-
-#################################################################
-# Lead Scoring
-#################################################################
-
-def calculate_lead_score(query, history, distance):
-    score = 0.0
-    w = LEAD_SCORE_WEIGHTS
-
-    if distance is not None and distance < w["distance_threshold"]:
-        score += w["low_distance_score"]
-
-    turns = len(history.split("|")) if history else 0
-    score += min(turns, 3) * w["history_turn_score"]
-
-    lower_q = query.lower()
-    for kw in LEAD_TRIGGER_KEYWORDS:
-        if kw in lower_q:
-            score += w["keyword_score_trigger"]
-            break
-
-    return score
-
-
-#################################################################
-# Main RAG Function
-#################################################################
-
-def answer_query_with_cache_first(raw_query, collection, history_queries=""):
-    english, detected_lang = translator.to_english(raw_query)
-
-    if detected_lang.startswith("ERROR"):
-        return LANGUAGE_FAIL_MESSAGE, "Translation Error", 1.0, [], True, None, detected_lang, 0.0
-
-    # small talk
-    st = check_small_talk(english)
-    if st:
-        return translator.from_english(st, detected_lang), "Small Talk", None, [], False, None, detected_lang, 0.0
-
-    # cache
-    cached = get_cached_answer(english)
-    if cached:
-        answer_en, source_tag, matched = cached
-        return translator.from_english(answer_en, detected_lang), f"Cache HIT", None, [], False, None, detected_lang, 0.0
-
-    # clean
-    cleaned, _ = clean_query_with_gemini(english)
-
-    # retrieve context
-    context, distance, topk = retrieve_context(cleaned, collection, history_queries)
-
-    score = calculate_lead_score(cleaned, history_queries, distance)
-
-    # unclear
-    if distance > UNCLEAR_QUERY_THRESHOLD:
-        unclear = translator.from_english(UNCLEAR_QUERY_RESPONSE, detected_lang)
-        return unclear, "Unclear Query", distance, topk, True, None, detected_lang, score
-
-    # generate with Gemini
-    prompt = f"CONTEXT:\n{context}\n\nUSER QUESTION: {cleaned}"
-
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {"parts": [{"text": GEMINI_RAG_SYSTEM_PROMPT}]}
-    }
-
-    try:
-        res = requests.post(API_URL, json=payload)
-        res.raise_for_status()
-        data = res.json()
-        answer_en = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", FINAL_FALLBACK_MESSAGE)
-        )
-    except Exception:
-        answer_en = FINAL_FALLBACK_MESSAGE
-
-    # save to cache
-    if answer_en != FINAL_FALLBACK_MESSAGE:
-        src = topk[0].get("canonical", "RAG") if topk else "RAG"
-        save_answer_to_cache(cleaned, answer_en, src)
-
-    translated = translator.from_english(answer_en, detected_lang)
-
-    return translated, "Gemini API", distance, topk, False, None, detected_lang, score
+    return out

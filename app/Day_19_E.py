@@ -1,217 +1,110 @@
+# app/Day_19_E.py
 """
-Day_19_E — Backend-Safe Database Layer (Render-compatible)
-Handles:
-- Query Cache (SQLite)
-- Chat Analytics
-- Lead Logging
-- FAQ/KB Helpers
+Debug + introspection helpers for the Leanext Chroma index.
+
+These helpers are meant to be called from FastAPI routes like `/debug/indexed`
+or internal tools, but they do NOT modify the index.
 """
 
-import sqlite3
-import os
-import logging
-from datetime import datetime
+from typing import Any, Dict, List
 
-from .Day_19_A import CACHE_DB_PATH, ANALYTICS_DB_PATH, LEADS_DB_PATH
+from chromadb.api.models.Collection import Collection
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from app.Day_19_B import get_chroma_client
 
 
-###############################################################
-# 1. Ensure directories exist
-###############################################################
-def ensure_dir(path):
-    folder = os.path.dirname(path)
-    if folder and not os.path.exists(folder):
-        os.makedirs(folder, exist_ok=True)
+# -------------------------------------------------------------------
+# 1. Index-level stats
+# -------------------------------------------------------------------
 
+def get_index_stats() -> Dict[str, Any]:
+    """
+    Return a lightweight summary of the Chroma index:
+      - number of collections
+      - per-collection document counts
+    """
+    client = get_chroma_client()
+    cols = client.list_collections()
 
-###############################################################
-# 2. Initialize DBs
-###############################################################
-def init_cache_db():
-    ensure_dir(CACHE_DB_PATH)
-    conn = sqlite3.connect(CACHE_DB_PATH)
-    cur = conn.cursor()
+    coll_summaries: List[Dict[str, Any]] = []
+    for col in cols:
+        try:
+            count = col.count()
+        except Exception:
+            count = None
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question TEXT UNIQUE,
-            answer TEXT,
-            source TEXT,
-            updated_at TEXT
+        coll_summaries.append(
+            {
+                "name": col.name,
+                "id": getattr(col, "id", None),
+                "document_count": count,
+            }
         )
-    """)
 
-    conn.commit()
-    conn.close()
-    return True
-
-
-def init_analytics_db():
-    ensure_dir(ANALYTICS_DB_PATH)
-    conn = sqlite3.connect(ANALYTICS_DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS analytics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            query TEXT,
-            translated_query TEXT,
-            answer TEXT,
-            source TEXT,
-            language TEXT,
-            rating INTEGER,
-            timestamp TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-    return True
+    return {
+        "total_collections": len(cols),
+        "collections": coll_summaries,
+    }
 
 
-def init_leads_db():
-    ensure_dir(LEADS_DB_PATH)
-    conn = sqlite3.connect(LEADS_DB_PATH)
-    cur = conn.cursor()
+# -------------------------------------------------------------------
+# 2. List indexed documents / URLs (for debug UI)
+# -------------------------------------------------------------------
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            phone TEXT,
-            email TEXT,
-            demo_type TEXT,
-            organization TEXT,
-            timestamp TEXT
-        )
-    """)
+def list_indexed_documents(
+    collection_name: str | None = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """
+    Return up to `limit` documents from either:
+      - a specific collection (if name given), or
+      - all collections concatenated.
 
-    conn.commit()
-    conn.close()
-    return True
+    Each item:
+      {
+        "collection": "...",
+        "id": "...",
+        "document": "...",
+        "metadata": {...}
+      }
+    """
+    client = get_chroma_client()
+    cols: List[Collection]
 
+    if collection_name:
+        # Try to get the named collection, or fall back if it doesn't exist
+        try:
+            col = client.get_collection(name=collection_name)
+            cols = [col]
+        except Exception:
+            # Fallback: nothing
+            return []
+    else:
+        cols = client.list_collections()
 
-###############################################################
-# 3. Cache Functions
-###############################################################
-def get_cached_answer(cleaned_question):
-    """Returns (answer, source, matched_query) or None"""
-    try:
-        conn = sqlite3.connect(CACHE_DB_PATH)
-        cur = conn.cursor()
+    results: List[Dict[str, Any]] = []
 
-        cur.execute("SELECT answer, source, question FROM cache WHERE question = ?", (cleaned_question,))
-        row = cur.fetchone()
-        conn.close()
+    for col in cols:
+        try:
+            data = col.get(include=["documents", "metadatas"])
+        except Exception:
+            continue
 
-        if row:
-            return row[0], row[1], row[2]
-        return None
+        ids = data.get("ids", []) or []
+        docs = data.get("documents", []) or []
+        metas = data.get("metadatas", []) or []
 
-    except Exception as e:
-        logging.error(f"Cache lookup failed: {e}")
-        return None
+        for _id, doc, meta in zip(ids, docs, metas):
+            results.append(
+                {
+                    "collection": col.name,
+                    "id": _id,
+                    "document": doc,
+                    "metadata": meta or {},
+                }
+            )
 
+            if len(results) >= limit:
+                return results
 
-def save_answer_to_cache(cleaned_question, answer, source):
-    try:
-        conn = sqlite3.connect(CACHE_DB_PATH)
-        cur = conn.cursor()
-
-        cur.execute("""
-            INSERT INTO cache (question, answer, source, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(question) DO UPDATE SET
-                answer = excluded.answer,
-                source = excluded.source,
-                updated_at = excluded.updated_at
-        """, (cleaned_question, answer, source, datetime.utcnow().isoformat()))
-
-        conn.commit()
-        conn.close()
-        return True
-
-    except Exception as e:
-        logging.error(f"Cache save failed: {e}")
-        return False
-
-
-def update_cached_answer(question, new_answer, new_source):
-    """Used when the user presses 👍 on a regenerated answer."""
-    return save_answer_to_cache(question, new_answer, new_source)
-
-
-###############################################################
-# 4. Analytics Logging
-###############################################################
-def log_chatbot_interaction(query, translated_query, answer, source, language, rating=None):
-    try:
-        conn = sqlite3.connect(ANALYTICS_DB_PATH)
-        cur = conn.cursor()
-
-        cur.execute("""
-            INSERT INTO analytics (
-                query, translated_query, answer, source, language, rating, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            query,
-            translated_query,
-            answer,
-            source,
-            language,
-            rating,
-            datetime.utcnow().isoformat()
-        ))
-
-        conn.commit()
-        conn.close()
-        return True
-
-    except Exception as e:
-        logging.error(f"Analytics log failed: {e}")
-        return False
-
-
-###############################################################
-# 5. Lead Logging
-###############################################################
-def log_lead_data(name, phone, email, demo_type, org):
-    try:
-        conn = sqlite3.connect(LEADS_DB_PATH)
-        cur = conn.cursor()
-
-        cur.execute("""
-            INSERT INTO leads (name, phone, email, demo_type, organization, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            name,
-            phone,
-            email,
-            demo_type,
-            org,
-            datetime.utcnow().isoformat()
-        ))
-
-        conn.commit()
-        conn.close()
-        return True
-
-    except Exception as e:
-        logging.error(f"Lead log failed: {e}")
-        return False
-
-
-###############################################################
-# 6. Fetching indexed URLs (Debug)
-###############################################################
-def get_all_indexed_urls(collection):
-    """Returns list of canonical URLs from the ChromaDB collection."""
-    try:
-        all_meta = collection.get(include=["metadatas"])
-        urls = [m.get("canonical") for m in all_meta["metadatas"] if m.get("canonical")]
-        return list(set(urls))
-    except:
-        return []
+    return results
