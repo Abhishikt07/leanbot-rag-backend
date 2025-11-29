@@ -68,15 +68,7 @@ def background_startup():
     logger.info("⏳ Background initialization started...")
 
     try:
-        # Import here to avoid any circular import issues
-        from app.Day_19_B import load_or_build_knowledge_base
-
-        # 1) Ensure main KB is opened (uses existing Chroma DB in app/chroma_db_leanext)
-        kb = load_or_build_knowledge_base()
-        if kb is not None:
-            logger.info("[Init] Knowledge Base loaded successfully.")
-        else:
-            logger.warning("[Init] Knowledge Base returned None.")
+    
 
         # 2) Pre-warm FAQ suggestions from helper module F
         try:
